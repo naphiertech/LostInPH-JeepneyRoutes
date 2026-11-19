@@ -1,0 +1,513 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-display: "Geist", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  color-scheme: light dark;
+
+  --bg-light: #F8F9FA;
+  --bg-dark: #0B0D10;
+  --surface-light: #FFFFFF;
+  --surface-dark: #13161B;
+  --surface-raised-light: #F1F3F5;
+  --surface-raised-dark: #1A1E25;
+  --fg-light: #111827;
+  --fg-dark: #F3F4F6;
+  --fg-secondary-light: #4B5563;
+  --fg-secondary-dark: #9CA3AF;
+  --fg-muted-light: #6B7280;
+  --fg-muted-dark: #7E8794;
+  --border-light: #E5E7EB;
+  --border-dark: #252A35;
+  --border-subtle-light: #EEF0F3;
+  --border-subtle-dark: #1D212B;
+
+  --accent-light: #5D9B19;
+  --accent-dark: #78BE20;
+  --accent-subtle-light: #EFF6E5;
+  --accent-subtle-dark: #16240E;
+
+  --peak-light: #EA580C;
+  --peak-dark: #FB923C;
+  --peak-subtle-light: #FFF3ED;
+  --peak-subtle-dark: #2D1910;
+
+  --success-light: #15803D;
+  --success-dark: #4ADE80;
+  --success-subtle-light: #ECFDF5;
+  --success-subtle-dark: #0E291D;
+
+  --danger-light: #DC2626;
+  --danger-dark: #F87171;
+  --danger-subtle-light: #FEF2F2;
+  --danger-subtle-dark: #2D1414;
+
+  --background: var(--bg-light);
+  --surface: var(--surface-light);
+  --surface-raised: var(--surface-raised-light);
+  --foreground: var(--fg-light);
+  --text-secondary: var(--fg-secondary-light);
+  --text-muted: var(--fg-muted-light);
+  --border: var(--border-light);
+  --border-subtle: var(--border-subtle-light);
+  --accent: var(--accent-light);
+  --accent-subtle: var(--accent-subtle-light);
+  --peak: var(--peak-light);
+  --peak-subtle: var(--peak-subtle-light);
+  --success: var(--success-light);
+  --success-subtle: var(--success-subtle-light);
+  --danger: var(--danger-light);
+  --danger-subtle: var(--danger-subtle-light);
+
+  --scrollbar-track: #E5E7EB;
+  --scrollbar-thumb: #6B7280;
+
+  /* Shared Motion Token Scale (emil-design-eng + transitions.dev) */
+  --duration-stagger: 40ms;
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --duration-slow: 400ms;
+  --duration-very-slow: 500ms;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
+
+  --distance-micro: 4px;
+  --distance-small: 6px;
+  --distance-base: 8px;
+
+  --scale-large: 0.96;
+  --scale-medium: 0.97;
+  --scale-small: 0.985;
+
+  --blur-small: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+    --background: var(--bg-dark);
+    --surface: var(--surface-dark);
+    --surface-raised: var(--surface-raised-dark);
+    --foreground: var(--fg-dark);
+    --text-secondary: var(--fg-secondary-dark);
+    --text-muted: var(--fg-muted-dark);
+    --border: var(--border-dark);
+    --border-subtle: var(--border-subtle-dark);
+    --accent: var(--accent-dark);
+    --accent-subtle: var(--accent-subtle-dark);
+    --peak: var(--peak-dark);
+    --peak-subtle: var(--peak-subtle-dark);
+    --success: var(--success-dark);
+    --success-subtle: var(--success-subtle-dark);
+    --danger: var(--danger-dark);
+    --danger-subtle: var(--danger-subtle-dark);
+    --scrollbar-track: #181B22;
+    --scrollbar-thumb: #8A96A8;
+  }
+}
+
+:root.dark {
+  color-scheme: dark;
+  --background: var(--bg-dark);
+  --surface: var(--surface-dark);
+  --surface-raised: var(--surface-raised-dark);
+  --foreground: var(--fg-dark);
+  --text-secondary: var(--fg-secondary-dark);
+  --text-muted: var(--fg-muted-dark);
+  --border: var(--border-dark);
+  --border-subtle: var(--border-subtle-dark);
+  --accent: var(--accent-dark);
+  --accent-subtle: var(--accent-subtle-dark);
+  --peak: var(--peak-dark);
+  --peak-subtle: var(--peak-subtle-dark);
+  --success: var(--success-dark);
+  --success-subtle: var(--success-subtle-dark);
+  --danger: var(--danger-dark);
+  --danger-subtle: var(--danger-subtle-dark);
+  --scrollbar-track: #181B22;
+  --scrollbar-thumb: #8A96A8;
+}
+
+:root.light {
+  color-scheme: light;
+}
+
+html {
+  accent-color: var(--accent);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  font-family: var(--font-sans);
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  margin: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+/* Faint geometric grid backdrop matching Sentinel auth column */
+.auth-grid-bg {
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(to right, var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border-subtle) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+.visually-hidden {
+  position: absolute;
+  clip-path: inset(50%);
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+}
+
+/* Responsive Data Table (container-query stacked layout + sticky header) */
+.table-wrapper {
+  overflow: auto;
+  max-inline-size: 100%;
+  max-block-size: min(560px, 75vh);
+  container-type: inline-size;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.table-wrapper table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+}
+
+.table-wrapper thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: var(--surface-raised);
+}
+
+.table-wrapper th,
+.table-wrapper td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.table-wrapper thead th {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.table-wrapper tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--surface);
+  font-weight: 500;
+}
+
+.table-wrapper tbody tr:hover td,
+.table-wrapper tbody tr:hover th {
+  background: var(--surface-raised);
+}
+
+@container (width < 660px) {
+  .table-wrapper table,
+  .table-wrapper thead,
+  .table-wrapper tbody,
+  .table-wrapper tr,
+  .table-wrapper th,
+  .table-wrapper td {
+    display: block;
+  }
+
+  .table-wrapper thead {
+    display: none;
+  }
+
+  .table-wrapper tr {
+    margin: 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .table-wrapper tbody th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table-wrapper td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.875rem;
+    text-align: right;
+  }
+
+  .table-wrapper td::before {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    text-align: left;
+  }
+
+  .table-wrapper td:nth-child(2)::before {
+    content: var(--col-2, "Detail") ": ";
+  }
+  .table-wrapper td:nth-child(3)::before {
+    content: var(--col-3, "City") ": ";
+  }
+  .table-wrapper td:nth-child(4)::before {
+    content: var(--col-4, "Type") ": ";
+  }
+  .table-wrapper td:nth-child(5)::before {
+    content: var(--col-5, "Value") ": ";
+  }
+  .table-wrapper td:nth-child(6)::before {
+    content: var(--col-6, "Count") ": ";
+  }
+  .table-wrapper td:nth-child(7)::before {
+    content: var(--col-7, "Status") ": ";
+  }
+  .table-wrapper td:nth-child(8)::before {
+    content: var(--col-8, "Action") ": ";
+  }
+}
+
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: var(--surface-raised);
+  z-index: 1;
+}
+
+.leaflet-control-attribution {
+  display: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 0.12);
+}
+
+.leaflet-popup-tip {
+  background: var(--surface);
+}
+
+/* ── Universal Interactive & Motion System (emil-design-eng + transitions.dev) ── */
+@keyframes t-panel-enter {
+  from {
+    opacity: 0.01;
+    translate: 0 var(--distance-base);
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes t-backdrop-enter {
+  from {
+    opacity: 0.01;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes t-modal-enter {
+  from {
+    opacity: 0.01;
+    scale: var(--scale-large);
+    translate: 0 var(--distance-small);
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes t-error-shake {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  20% {
+    translate: calc(var(--distance-small) * -1) 0;
+  }
+  45% {
+    translate: var(--distance-small) 0;
+  }
+  70% {
+    translate: calc(var(--distance-micro) * -1) 0;
+  }
+  85% {
+    translate: var(--distance-micro) 0;
+  }
+}
+
+@keyframes t-badge-pop {
+  0% {
+    scale: 0.88;
+  }
+  60% {
+    scale: 1.08;
+  }
+  100% {
+    scale: 1;
+  }
+}
+
+@keyframes t-check-draw {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Automatic tactile press feedback for all current & future buttons, tabs, and radios */
+button:not(:disabled):not(.leaflet-container *),
+[role="tab"]:not(.leaflet-container *),
+[role="radio"]:not(.leaflet-container *) {
+  transition-property: scale, transform, background-color, border-color, color, opacity, box-shadow;
+  transition-duration: var(--duration-quick);
+  transition-timing-function: var(--ease-out);
+}
+
+button:not(:disabled):not(.leaflet-container *):active,
+[role="tab"]:not(.leaflet-container *):active,
+[role="radio"]:not(.leaflet-container *):active {
+  scale: var(--scale-medium);
+}
+
+/* Automatic focus ring & validation transitions for all current & future form controls */
+input:not([type="checkbox"]):not([type="radio"]),
+select:not(.opacity-0),
+textarea {
+  transition-property: border-color, box-shadow, background-color, color;
+  transition-duration: var(--duration-quick);
+  transition-timing-function: var(--ease-smooth-out);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+select:not(.opacity-0):focus-visible,
+textarea:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+  animation: t-error-shake 280ms var(--ease-smooth-out);
+}
+
+[role="alert"] {
+  animation: t-error-shake 280ms var(--ease-smooth-out);
+}
+
+/* Automatic entrance for all current & future accessible dialogs/drawers */
+[role="dialog"] {
+  animation: t-backdrop-enter var(--duration-quick) var(--ease-out);
+}
+
+[role="dialog"] > div,
+[role="dialog"] > aside {
+  animation: t-modal-enter var(--duration-fast) var(--ease-smooth-out);
+}
+
+/* Reusable semantic motion hooks */
+.t-panel-reveal {
+  animation: t-panel-enter var(--duration-fast) var(--ease-smooth-out);
+}
+
+.t-card-lift {
+  transition-property: translate, scale, border-color, background-color;
+  transition-duration: var(--duration-quick);
+  transition-timing-function: var(--ease-out);
+}
+
+.t-card-lift:active {
+  scale: var(--scale-small);
+}
+
+.t-pop {
+  animation: t-badge-pop 260ms var(--ease-bounce);
+}
+
+.t-chevron {
+  transition: transform var(--duration-fast) var(--ease-smooth-out);
+}
+
+.t-success-check {
+  animation: t-badge-pop var(--duration-fast) var(--ease-bounce);
+}
+
+.t-success-check path {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: t-check-draw 300ms var(--ease-smooth-out) var(--duration-micro) forwards;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .t-card-lift:hover {
+    translate: 0 -1.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    scale: 1 !important;
+    translate: 0 0 !important;
+    scroll-behavior: auto !important;
+    transition-property: background-color, border-color, color, opacity !important;
+    transition-duration: 120ms !important;
+  }
+}
