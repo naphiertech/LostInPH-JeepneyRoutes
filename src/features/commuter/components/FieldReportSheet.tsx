@@ -5,7 +5,7 @@ import {
   CommunityReport,
   JeepneyRoute,
   NewFieldReportInput,
-} from '../../../domain/transit/types';
+} from '@/domain/transit/types';
 
 interface FieldReportSheetProps {
   isOpen: boolean;
@@ -14,7 +14,9 @@ interface FieldReportSheetProps {
   initialRouteCode: string;
   reporterName: string;
   onClose: () => void;
-  onSubmitReport: (input: NewFieldReportInput) => CommunityReport;
+  onSubmitReport: (
+    input: NewFieldReportInput
+  ) => Promise<CommunityReport> | CommunityReport;
 }
 
 const ISSUE_OPTIONS: ReadonlyArray<{
@@ -22,7 +24,6 @@ const ISSUE_OPTIONS: ReadonlyArray<{
   label: string;
 }> = [
   { id: 'route_detour', label: 'Detour' },
-  { id: 'fare_change', label: 'Fare' },
   { id: 'landmark_update', label: 'Landmark' },
   { id: 'new_stop', label: 'New stop' },
 ];
@@ -59,14 +60,14 @@ export const FieldReportSheet: React.FC<FieldReportSheetProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = summary.trim();
     if (trimmed.length < 4) {
       setError('Enter a short summary of what changed.');
       return;
     }
-    const created = onSubmitReport({
+    const created = await onSubmitReport({
       cityId: city.id,
       routeCode: routeCode || cityRoutes[0]?.code || 'GENERAL',
       reporterName,
@@ -156,7 +157,7 @@ export const FieldReportSheet: React.FC<FieldReportSheetProps> = ({
               <div className="mb-1.5 text-xs font-medium text-[var(--text-secondary)]">
                 Issue type
               </div>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {ISSUE_OPTIONS.map((opt) => (
                   <button
                     key={opt.id}

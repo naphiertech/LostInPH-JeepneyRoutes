@@ -1,23 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { DEMO_ACCOUNTS } from '../adapters/mock/demoAccounts';
-import { createMockAuthAdapter } from '../adapters/mock/mockAuthAdapter';
-import { createMockTransitStoreAdapter } from '../adapters/mock/mockTransitStoreAdapter';
-import { SEED_CITIES } from '../adapters/mock/seedCities';
-import { SEED_FARE_RULES } from '../adapters/mock/seedFareRules';
-import { SEED_ROUTES } from '../adapters/mock/seedRoutes';
-import { App } from '../app/App';
-import { calculateLegFare, resolveFareRates } from '../domain/transit/fareEngine';
+import { createMockAuthAdapter } from '@/adapters/mock/mockAuthAdapter';
+import { createMockPresenceAdapter } from '@/adapters/mock/mockPresenceAdapter';
+import { createMockTransitStoreAdapter } from '@/adapters/mock/mockTransitStoreAdapter';
+import { DEMO_ACCOUNTS } from '@/adapters/mock/seeds/demoAccounts';
+import { SEED_CITIES } from '@/adapters/mock/seeds/seedCities';
+import { SEED_ROUTES } from '@/adapters/mock/seeds/seedRoutes';
+import { App } from '@/app/App';
+import {
+  auditTransitNetwork,
+  validateRouteImportPayload,
+} from '@/domain/transit/routeAudit';
 import {
   findNearestCity,
   planJeepneyTrips,
   rankRoutesNearPinpoint,
+  recommendTripsFromOriginToPinpoint,
   sliceRoutePathForStops,
-} from '../domain/transit/tripPlanner';
-import { AuthWorkspace } from '../features/auth/AuthWorkspace';
+} from '@/domain/transit/tripPlanner';
+import { AuthWorkspace } from '@/features/auth/AuthWorkspace';
+import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 
 describe('LostInPH Multi-City Transit Domain', () => {
-  it('covers all 5 Philippine cities with routes, signboards, and fare rules', () => {
+  it('covers all 5 Philippine cities with road-snapped routes and signboards', () => {
     expect(SEED_CITIES.map((c) => c.id)).toEqual([
       'cebu',
       'manila',
@@ -36,8 +41,6 @@ describe('LostInPH Multi-City Transit Domain', () => {
         expect(route.path.length).toBeGreaterThan(100);
       }
     }
-
-    expect(SEED_FARE_RULES).toHaveLength(2);
   });
 
   it('ranks IT Park pinpoint routes (17C & 04L) on top and slices road-snapped trip legs', () => {
@@ -62,6 +65,21 @@ describe('LostInPH Multi-City Transit Domain', () => {
       route04L.stops[2]
     );
     expect(slicedRoad.length).toBeGreaterThan(20);
+
+    // Real Origin -> Pinpoint recommendation recommends Direct 17C from IT Park -> Fuente
+    const fuenteStop = cebuRoutes[0].stops.find((s) =>
+      s.name.toLowerCase().includes('fuente')
+    )!;
+    const directRec = recommendTripsFromOriginToPinpoint(
+      itParkStop.lat,
+      itParkStop.lng,
+      fuenteStop.lat,
+      fuenteStop.lng,
+      cebuRoutes
+    );
+    expect(directRec.recommendations.length).toBeGreaterThanOrEqual(1);
+    expect(directRec.recommendations[0].trip.type).toBe('direct');
+    expect(directRec.recommendations[0].trip.legs[0].route.code).toBe('17C');
   });
 
   it('exposes strictly 2 demo accounts covering Admin and App roles', () => {
@@ -71,7 +89,7 @@ describe('LostInPH Multi-City Transit Domain', () => {
   });
 });
 
-describe('Trip Planning & PHP Fare Engine', () => {
+describe('Trip Planning & Supabase-Ready Async Ports', () => {
   it('detects the nearest Philippine city from coordinates', () => {
     expect(findNearestCity(10.3265, 123.8988, SEED_CITIES).id).toBe('cebu');
     expect(findNearestCity(14.5825, 120.9845, SEED_CITIES).id).toBe('manila');
@@ -87,7 +105,9 @@ describe('Trip Planning & PHP Fare Engine', () => {
       'Fuente Osmeña Circle',
       SEED_ROUTES
     );
-    expect(direct.some((o) => o.type === 'direct' && o.legs[0].route.code === '17C')).toBe(true);
+    expect(
+      direct.some((o) => o.type === 'direct' && o.legs[0].route.code === '17C')
+    ).toBe(true);
 
     const transfer = planJeepneyTrips(
       'cebu',
@@ -101,11 +121,19 @@ describe('Trip Planning & PHP Fare Engine', () => {
     expect(firstTransfer!.transferNote).toContain('Transfer at');
   });
 
-  it('rounds 20% discounted PHP fare to nearest ₱0.25 increment', () => {
-    const route17c = SEED_ROUTES.find((r) => r.code === '17C')!;
-    const shortRide = calculateLegFare(route17c, 2.5);
-    expect(shortRide.regular).toBe(13);
-    expect(shortRide.discounted).toBe(10.5);
+  it('tracks live commuter online presence and cleans up on leave via PresencePort', () => {
+    const presence = createMockPresenceAdapter();
+    const baseline = presence.getAdoptionSnapshot();
+    const stopTracking = presence.trackCommuterOnline('usr-live-1', 'cebu');
+
+    const active = presence.getAdoptionSnapshot();
+    expect(active.onlineNow).toBe(baseline.onlineNow + 1);
+    expect(active.onlineByCity.cebu).toBe(baseline.onlineByCity.cebu + 1);
+
+    stopTracking();
+    const afterLeave = presence.getAdoptionSnapshot();
+    expect(afterLeave.onlineNow).toBe(baseline.onlineNow);
+    expect(afterLeave.onlineByCity.cebu).toBe(baseline.onlineByCity.cebu);
   });
 });
 
@@ -119,7 +147,7 @@ describe('Split-Screen Login Module & Form Validation', () => {
     }
   });
 
-  it('renders autofill attributes, revealable password, validation errors, and Sign up switch', () => {
+  it('renders autofill attributes, revealable password, validation errors, and Sign up switch', async () => {
     const authPort = createMockAuthAdapter();
     render(
       <AuthWorkspace
@@ -144,7 +172,9 @@ describe('Split-Screen Login Module & Form Validation', () => {
     expect(passwordInput).toHaveAttribute('type', 'text');
 
     fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
-    expect(screen.getByText(/enter your email address/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/enter your email address/i)
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
     expect(
@@ -163,11 +193,18 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
     }
   });
 
-  it('boots into Login, isolates Admin Dashboard + sub-modules, and isolates App view on sign-out/switch', () => {
+  it('boots into Login, isolates Admin Dashboard + sub-modules, and isolates App view on sign-out/switch', async () => {
     const authPort = createMockAuthAdapter();
     const storePort = createMockTransitStoreAdapter();
+    const presencePort = createMockPresenceAdapter();
 
-    render(<App authPort={authPort} transitStore={storePort} />);
+    render(
+      <App
+        authPort={authPort}
+        transitStore={storePort}
+        presencePort={presencePort}
+      />
+    );
 
     // 1. Starts on Login screen ONLY
     expect(
@@ -180,37 +217,31 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
       screen.queryByRole('banner', { name: /lostinph commuter workspace/i })
     ).not.toBeInTheDocument();
 
-    // 2. Click Admin demo -> ONLY Admin Dashboard mounts
+    // 2. Click Admin demo -> ONLY streamlined 6-module Admin Dashboard mounts
     fireEvent.click(screen.getByRole('button', { name: /admin dashboard/i }));
     expect(
-      screen.getByRole('navigation', { name: /admin sidebar navigation/i })
+      await screen.findByRole('navigation', {
+        name: /admin sidebar navigation/i,
+      })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: /^network overview$/i })
+      screen.getByRole('heading', { name: /^overview & live pulse$/i })
     ).toBeInTheDocument();
+    expect(screen.getByText(/app downloads & installs/i)).toBeInTheDocument();
+    expect(screen.getByText(/users online now/i)).toBeInTheDocument();
     expect(
       screen.queryByRole('banner', { name: /lostinph commuter workspace/i })
     ).not.toBeInTheDocument();
 
-    // 2b. Navigate to Sales & Store Analytics sub-module (₱199 Google Play & App Store + EvilCharts + Toast)
+    // 2b. Navigate to Users Directory & test live presence filter
     fireEvent.click(
-      screen.getByRole('button', { name: /sales & store analytics/i })
+      screen.getByRole('button', { name: /users directory/i })
     );
     expect(
-      screen.getByRole('heading', { name: /sales & store analytics/i })
+      screen.getByRole('heading', { name: /^users directory$/i })
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/store conversion & retention funnel/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/₱199 checkout payment channels/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/store & network production readiness radar/i)
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '₱249' }));
-    fireEvent.click(screen.getByRole('button', { name: /export csv/i }));
-    expect(screen.getByRole('status')).toHaveTextContent(/exported/i);
+    fireEvent.click(screen.getByRole('button', { name: /online now/i }));
+    expect(screen.getByText(/maya santos/i)).toBeInTheDocument();
 
     // 2c. Open top-nav Notifications popover and jump to Notification Center sub-module
     fireEvent.click(
@@ -219,7 +250,7 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
     expect(
       screen.getByRole('dialog', { name: /notifications panel/i })
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: /transit & store/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /transit & users/i }));
     fireEvent.click(
       screen.getByRole('button', { name: /go to notification center/i })
     );
@@ -227,52 +258,46 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
       screen.getByRole('heading', { name: /^notifications$/i })
     ).toBeInTheDocument();
 
-    // 3. Navigate to Routes & Signboards sub-module
+    // 3. Navigate to merged Routes & Stops module, verify inline draft promotion & Stops & Map tab
     fireEvent.click(
-      screen.getByRole('button', { name: /routes & signboards/i })
+      screen.getByRole('button', { name: /routes & stops/i })
     );
     expect(
       screen.getByRole('region', {
         name: /philippine jeepney and modern puv route registry/i,
       })
     ).toHaveAttribute('tabindex', '0');
+    const verifyButtons = screen.getAllByRole('button', { name: /^verify$/i });
+    expect(verifyButtons.length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(verifyButtons[0]);
+    fireEvent.click(screen.getByRole('tab', { name: /stops & map/i }));
+    expect(
+      await screen.findByText(/mapped stops & hubs/i)
+    ).toBeInTheDocument();
 
-    // 4. Navigate to Field Reports & Triage sub-module and test triage filter
+    // 4. Navigate to Commuter Reports and test triage filter
     fireEvent.click(
-      screen.getByRole('button', { name: /field reports & triage/i })
+      screen.getByRole('button', { name: /^commuter reports/i })
     );
     fireEvent.click(screen.getByRole('button', { name: 'needs-triage' }));
     expect(screen.getByText('REP-204')).toBeInTheDocument();
     expect(screen.queryByText('REP-201')).not.toBeInTheDocument();
 
-    // 5. Navigate to Route Verification sub-module and promote 12L draft
-    fireEvent.click(
-      screen.getByRole('button', { name: /route verification/i })
-    );
-    const verifyButtons = screen.getAllByRole('button', {
-      name: /verify corridor/i,
-    });
-    expect(verifyButtons.length).toBeGreaterThanOrEqual(1);
-    fireEvent.click(verifyButtons[0]);
-
-    // 6. Navigate to Fare Matrices sub-module
-    fireEvent.click(screen.getByRole('button', { name: /fare matrices/i }));
-    expect(
-      screen.getByText(/interactive ₱ fare matrix verifier/i)
-    ).toBeInTheDocument();
-
-    // 7. Sign out returns cleanly to Login
+    // 5. Sign out returns cleanly to Login
     const signOutButtons = screen.getAllByRole('button', { name: /sign out/i });
     fireEvent.click(signOutButtons[0]);
     expect(
-      screen.getByRole('heading', { name: /sign in to your account/i })
+      await screen.findByRole('heading', { name: /sign in to your account/i })
     ).toBeInTheDocument();
 
-    // 8. Click App demo -> ONLY Commuter App UI mounts (no top-bar Sign out clutter)
+    // 6. Click App demo -> ONLY Commuter App UI mounts, landing directly on Routes map + live location
     fireEvent.click(screen.getByRole('button', { name: /commuter app ui/i }));
     expect(
-      screen.getByRole('banner', { name: /lostinph commuter workspace/i })
+      await screen.findByRole('banner', {
+        name: /lostinph commuter workspace/i,
+      })
     ).toBeInTheDocument();
+    expect(screen.getByText(/you are here/i)).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /sign out/i })
     ).not.toBeInTheDocument();
@@ -287,57 +312,57 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('syncs Admin fare rule edits + advisories into App and sends Commuter field reports back to Admin triage', () => {
+  it('lands on live GPS Routes, recommends Origin -> Pinpoint rides with zero fare UI, and syncs Commuter reports back to Admin', async () => {
     const authPort = createMockAuthAdapter();
     const storePort = createMockTransitStoreAdapter();
+    const presencePort = createMockPresenceAdapter();
 
-    render(<App authPort={authPort} transitStore={storePort} />);
-
-    // Sign into Admin -> Fare Matrices -> update Traditional PUJ base fare to ₱16.00
-    fireEvent.click(screen.getByRole('button', { name: /admin dashboard/i }));
-    fireEvent.click(screen.getByRole('button', { name: /fare matrices/i }));
-    const editButtons = screen.getAllByRole('button', { name: /edit rates/i });
-    fireEvent.click(editButtons[0]);
-    const baseFareInput = screen.getByLabelText(
-      /base fare for traditional puj/i
+    render(
+      <App
+        authPort={authPort}
+        transitStore={storePort}
+        presencePort={presencePort}
+      />
     );
-    fireEvent.change(baseFareInput, { target: { value: '16' } });
-    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
 
-    // Verify pure fare engine helper picks up live rule
-    const updatedRates = resolveFareRates(SEED_ROUTES[0], storePort.loadSnapshot().fareRules);
-    expect(updatedRates.baseFare).toBe(16);
-
-    // Switch cleanly from Admin -> Login -> Commuter App
-    fireEvent.click(screen.getAllByRole('button', { name: /sign out/i })[0]);
+    // Sign directly into Commuter App -> lands on Routes map with live location & zero fare UI
     fireEvent.click(screen.getByRole('button', { name: /commuter app ui/i }));
-
-    // Verify Commuter App lands on Grab/Maxim-inspired Home Hub with live Admin ₱16.00 fare sync
-    expect(
-      screen.getByText(/saan tayo\? pick a landmark, jeepney code, or terminal/i)
-    ).toBeInTheDocument();
-    expect(screen.getAllByText('₱16.00').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/live corridor updates/i)).toBeInTheDocument();
-
-    // Test interactive LTFRB Fare Matrix Calculator on Home
-    fireEvent.click(screen.getByRole('button', { name: /fare matrix/i }));
-    expect(
-      screen.getByRole('heading', { name: /ltfrb fare matrix calculator/i })
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /^hide$/i }));
-
-    // Switch to Routes tab -> verify Admin ₱16.00 fare AND seeded active 12L detour appear
-    fireEvent.click(screen.getByRole('tab', { name: /^routes$/i }));
-    expect(screen.getAllByText('₱16.00').length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText(/you are here/i)).toBeInTheDocument();
     expect(screen.getByText('Detour')).toBeInTheDocument();
+    expect(screen.queryByText(/₱13\.00/i)).not.toBeInTheDocument();
 
-    // Open 17C Route Ticket Sheet & expand collapsible stops
+    // Pinpoint a Cebu landmark -> shows You -> Pinpoint recommended jeepney rides
+    fireEvent.click(
+      screen.getByRole('button', { name: /fuente osmeña circle/i })
+    );
+    expect(
+      screen.getByText(/recommended for your trip/i)
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /clear pin/i }));
+
+    // Open 17C Route Ticket Sheet -> shows Stops metric (no Min fare) & collapsible stops
     fireEvent.click(screen.getByRole('button', { name: /17c.*apas/i }));
-    expect(screen.getByText(/min fare/i)).toBeInTheDocument();
+    expect(screen.queryByText(/min fare/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/8 stops · 7\.4 km/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /view stops/i }));
-    expect(screen.getByText(/cebu it park transport terminal/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^cebu it park transport terminal$/i)
+    ).toBeInTheDocument();
 
-    // Switch to Track tab, verify Leaflet watermark is absent, test draggable sheet Peek headroom bar, and submit a Field Report
+    // Check Home tab has Your location & Near Me (no Fare Matrix or Fare Pass)
+    fireEvent.click(screen.getByRole('tab', { name: /^home$/i }));
+    expect(
+      screen.getByText(
+        /saan tayo\? pick a landmark, jeepney code, or pinpoint on map/i
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/your location/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /near me/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /fare matrix/i })
+    ).not.toBeInTheDocument();
+
+    // Switch to Track tab, verify Leaflet watermark is absent, test Peek bar, and submit a Field Report
     fireEvent.click(screen.getByRole('tab', { name: /track/i }));
     expect(
       document.querySelector('.leaflet-control-attribution')
@@ -360,27 +385,15 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
     fireEvent.change(summaryInput, {
       target: { value: '17C boarding bay moved near Ayala exit' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /submit field report/i }));
-    expect(screen.getByText(/sent to operator triage/i)).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: /submit field report/i })
+    );
+    expect(
+      await screen.findByText(/sent to operator triage/i)
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^done$/i }));
 
-    // Return to Routes tab, close ticket sheet, test Map Pinpoint (IT Park), and filter Saved corridors inline
-    fireEvent.click(screen.getByRole('tab', { name: /routes/i }));
-    fireEvent.click(screen.getByRole('button', { name: /back to routes/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^cebu it park$/i }));
-    expect(
-      screen.getByText(/recommended near pinpoint/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/other routes in cebu city/i)
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /clear pin/i }));
-
-    fireEvent.click(screen.getByRole('button', { name: /^saved$/i }));
-    expect(screen.getByText(/2 routes/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /^all$/i }));
-
-    // Switch cleanly into Commuter Profile via top-right avatar button -> test Discount Pass -> Sign out
+    // Switch to Profile -> verify no Fare discount pass card, test Profile -> Track safety
     fireEvent.click(
       screen.getByRole('button', { name: /open maya santos profile/i })
     );
@@ -388,21 +401,23 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
       screen.getByRole('heading', { name: /^profile$/i })
     ).toBeInTheDocument();
     expect(screen.getByText(/commute dashboard/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('radio', { name: /student/i }));
-    expect(screen.getByText(/save ₱3\.25\/ride/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/fare discount pass/i)
+    ).not.toBeInTheDocument();
 
-    // Regression check: Profile -> Track navigation must never crash even from hidden map container state
     fireEvent.click(screen.getByRole('tab', { name: /^track$/i }));
     expect(screen.getByText(/on the way/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: /profile/i }));
 
-    // Switch back to Admin via Profile Sign out -> verify Field Report landed in Field Reports & Triage
+    // Switch to Admin -> verify Field Report landed in Commuter Reports
     fireEvent.click(
       screen.getByRole('button', { name: /sign out of lostinph/i })
     );
-    fireEvent.click(screen.getByRole('button', { name: /admin dashboard/i }));
     fireEvent.click(
-      screen.getByRole('button', { name: /field reports & triage/i })
+      await screen.findByRole('button', { name: /admin dashboard/i })
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: /^commuter reports/i })
     );
     expect(
       screen.getByRole('heading', {
@@ -411,59 +426,79 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders studio 3D vehicle sprites across Home, Routes, Ticket Sheet, and Profile with saved route code pills', () => {
+  it('renders studio 3D vehicle sprites across Home, Routes, Ticket Sheet, and Profile with saved route code pills', async () => {
     const authPort = createMockAuthAdapter();
     const storePort = createMockTransitStoreAdapter();
+    const presencePort = createMockPresenceAdapter();
 
     const { container } = render(
-      <App authPort={authPort} transitStore={storePort} />
+      <App
+        authPort={authPort}
+        transitStore={storePort}
+        presencePort={presencePort}
+      />
     );
 
     fireEvent.click(screen.getByRole('button', { name: /commuter app ui/i }));
+    await screen.findByText(/you are here/i);
 
-    // 1. Home popular routes render both Traditional Jeepney & Modern PUV WebP/PNG sprites
-    const homeSources = Array.from(container.querySelectorAll('picture source')).map(
-      (el) => el.getAttribute('srcset')
-    );
-    expect(homeSources).toContain('/vehicles/traditional-jeepney.webp');
-    expect(homeSources).toContain('/vehicles/modern-puv.webp');
+    // 1. Routes (initial landing tab) & RouteTicketSheet render WebP/PNG sprites cleanly
+    const routeSources = Array.from(
+      container.querySelectorAll('picture source')
+    ).map((el) => el.getAttribute('srcset'));
+    expect(routeSources).toContain('/vehicles/traditional-jeepney.webp');
+    expect(routeSources).toContain('/vehicles/modern-puv.webp');
 
-    const homeImgs = Array.from(container.querySelectorAll('picture img'));
-    expect(homeImgs.length).toBeGreaterThanOrEqual(4);
-    for (const img of homeImgs) {
+    const routeImgs = Array.from(container.querySelectorAll('picture img'));
+    expect(routeImgs.length).toBeGreaterThanOrEqual(4);
+    for (const img of routeImgs) {
       expect(img).toHaveAttribute('width', '480');
       expect(img).toHaveAttribute('height', '360');
       expect(img).toHaveAttribute('alt', '');
     }
 
-    // 2. Routes list & RouteTicketSheet render sprites cleanly
-    fireEvent.click(screen.getByRole('tab', { name: /^routes$/i }));
-    expect(
-      container.querySelector('picture source[srcset="/vehicles/traditional-jeepney.webp"]')
-    ).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole('button', { name: /17c.*apas/i }));
     expect(
-      container.querySelector('picture img[src="/vehicles/traditional-jeepney.png"]')
+      container.querySelector(
+        'picture img[src="/vehicles/traditional-jeepney.png"]'
+      )
+    ).toBeInTheDocument();
+
+    // 2. Home popular routes render sprites
+    fireEvent.click(screen.getByRole('tab', { name: /^home$/i }));
+    expect(
+      container.querySelector(
+        'picture source[srcset="/vehicles/traditional-jeepney.webp"]'
+      )
     ).toBeInTheDocument();
 
     // 3. Profile saved routes show both 3D sprite and explicit route-code pill (17C)
     fireEvent.click(screen.getByRole('tab', { name: /profile/i }));
     expect(screen.getByText('17C')).toBeInTheDocument();
     expect(
-      container.querySelector('picture source[srcset="/vehicles/traditional-jeepney.webp"]')
+      container.querySelector(
+        'picture source[srcset="/vehicles/traditional-jeepney.webp"]'
+      )
     ).toBeInTheDocument();
   });
 
-  it('opens a dedicated role-isolated Commuter Notification Center page instead of Profile', () => {
+  it('opens a dedicated role-isolated Commuter Notification Center page instead of Profile', async () => {
     const authPort = createMockAuthAdapter();
     const storePort = createMockTransitStoreAdapter();
+    const presencePort = createMockPresenceAdapter();
 
-    render(<App authPort={authPort} transitStore={storePort} />);
+    render(
+      <App
+        authPort={authPort}
+        transitStore={storePort}
+        presencePort={presencePort}
+      />
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /commuter app ui/i }));
+    await screen.findByText(/you are here/i);
 
-    // Open bell popover -> commuter-native tabs, zero Admin store revenue leaks
+    // Open bell popover -> commuter-native tabs, zero Admin operational leaks
     fireEvent.click(
       screen.getByRole('button', { name: /open notifications/i })
     );
@@ -473,7 +508,7 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
     expect(screen.getByRole('tab', { name: /^alerts/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /^updates/i })).toBeInTheDocument();
     expect(
-      screen.queryByText(/google play store/i)
+      screen.queryByText(/342 commuters online/i)
     ).not.toBeInTheDocument();
 
     // Go to notification center -> opens dedicated Notifications page (NOT Profile!)
@@ -505,13 +540,11 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
       screen.getByText(/escario capitol lane concrete repair/i)
     ).toBeInTheDocument();
 
-    // Back returns to Home cleanly
+    // Back returns to Routes cleanly
     fireEvent.click(
       screen.getByRole('button', { name: /back from notifications/i })
     );
-    expect(
-      screen.getByText(/saan tayo\? pick a landmark, jeepney code, or terminal/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/you are here/i)).toBeInTheDocument();
 
     // Re-open notification center and deep-link straight to 17C RouteTicketSheet
     fireEvent.click(
@@ -521,9 +554,200 @@ describe('Role-Isolated Root Flow & Admin Sub-Modules', () => {
       screen.getByRole('button', { name: /go to notification center/i })
     );
     fireEvent.click(screen.getByRole('button', { name: /^open 17c$/i }));
-    expect(screen.getByText(/min fare/i)).toBeInTheDocument();
+    expect(screen.getByText(/8 stops · 7\.4 km/i)).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: /apas · it park – carbon market/i })
     ).toBeInTheDocument();
+  });
+});
+
+describe('Admin QA Automation, Audit Log & Hardening', () => {
+  beforeEach(() => {
+    try {
+      window.localStorage?.clear?.();
+      window.sessionStorage?.clear?.();
+    } catch {
+      // Node 25 experimental localStorage fallback
+    }
+  });
+
+  it('detects duplicate codes, sparse geometry, and orphaned advisories via auditTransitNetwork & validates JSON imports', () => {
+    const cebuRoutes = SEED_ROUTES.filter((r) => r.cityId === 'cebu');
+    const duplicate = {
+      ...cebuRoutes[0],
+      id: 'dup-17c',
+      path: [
+        [10.33, 123.9],
+        [10.31, 123.89],
+      ] as [number, number][],
+    };
+    const report = auditTransitNetwork(
+      [...cebuRoutes, duplicate],
+      [
+        {
+          id: 'ADV-ORPHAN',
+          cityId: 'cebu',
+          routeCode: '99Z',
+          title: 'Ghost corridor repair',
+          description: 'Invalid route target',
+          severity: 'detour',
+          active: true,
+          reportedAt: '2026-11-21 10:00',
+        },
+      ],
+      SEED_CITIES
+    );
+
+    expect(report.issues.some((i) => i.code === 'duplicate_code')).toBe(true);
+    expect(report.issues.some((i) => i.code === 'sparse_geometry')).toBe(true);
+    expect(report.issues.some((i) => i.code === 'orphaned_advisory')).toBe(true);
+    expect(report.errorCount).toBeGreaterThanOrEqual(2);
+
+    const invalidImport = validateRouteImportPayload(
+      JSON.stringify([
+        {
+          code: '17C',
+          name: 'Duplicate route',
+          cityId: 'cebu',
+          stops: [
+            { name: 'A', lat: 10.32, lng: 123.9 },
+            { name: 'B', lat: 10.31, lng: 123.89 },
+          ],
+        },
+      ]),
+      SEED_CITIES.map((c) => c.id),
+      cebuRoutes
+    );
+    expect(invalidImport.ok).toBe(false);
+
+    const validImport = validateRouteImportPayload(
+      JSON.stringify([
+        {
+          code: '21B',
+          name: 'Mandaue – Cathedral',
+          cityId: 'cebu',
+          stops: [
+            { name: 'Mandaue Mercado', lat: 10.3235, lng: 123.9412 },
+            { name: 'SM City Cebu', lat: 10.3114, lng: 123.9182 },
+          ],
+        },
+      ]),
+      SEED_CITIES.map((c) => c.id),
+      cebuRoutes
+    );
+    expect(validImport.ok).toBe(true);
+    if (validImport.ok) {
+      expect(validImport.routes[0].code).toBe('21B');
+    }
+  });
+
+  it('blocks duplicate drafts, converts reports to advisories in 1 click, logs audit entries, simulates pinpoints, and confirms dataset reset', async () => {
+    const authPort = createMockAuthAdapter();
+    const storePort = createMockTransitStoreAdapter();
+    const presencePort = createMockPresenceAdapter();
+
+    render(
+      <App
+        authPort={authPort}
+        transitStore={storePort}
+        presencePort={presencePort}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /admin dashboard/i }));
+    await screen.findByRole('heading', { name: /^overview & live pulse$/i });
+
+    // 1. Routes & Stops: duplicate route code guard + Edit route
+    fireEvent.click(screen.getByRole('button', { name: /^routes & stops/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new route draft/i }));
+    fireEvent.change(screen.getByLabelText(/route code/i), {
+      target: { value: '17C' },
+    });
+    fireEvent.change(screen.getByLabelText(/corridor title/i), {
+      target: { value: 'Duplicate 17C' },
+    });
+    fireEvent.change(screen.getByLabelText(/windshield signboard placard/i), {
+      target: { value: 'DUP 17C' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: /save as field draft/i })
+    );
+    expect(screen.getByText(/already exists in cebu/i)).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    // Bulk JSON Import adds 21B
+    fireEvent.click(screen.getByRole('button', { name: /import json/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /load sample template/i })
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: /validate & import/i })
+    );
+    expect(
+      screen.getByRole('rowheader', { name: '21B' })
+    ).toBeInTheDocument();
+
+    // 2. Route QA & Simulator (lazy-loaded)
+    fireEvent.click(
+      screen.getByRole('button', { name: /route qa & simulator/i })
+    );
+    expect(
+      await screen.findByText(/automated qa integrity scan/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/pinpoint recommendation simulator/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/commuter recommendation preview/i)
+    ).toBeInTheDocument();
+
+    // 3. Commuter Reports -> 1-click Convert to Advisory
+    fireEvent.click(
+      screen.getByRole('button', { name: /^commuter reports/i })
+    );
+    const convertButtons = screen.getAllByRole('button', {
+      name: /convert to advisory/i,
+    });
+    fireEvent.click(convertButtons[0]);
+
+    // 4. Audit & Activity Log records both bulk import and advisory conversion
+    fireEvent.click(
+      screen.getByRole('button', { name: /audit & activity log/i })
+    );
+    expect(
+      screen.getByText(/converted report to live advisory/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/bulk imported 1 route/i)).toBeInTheDocument();
+
+    // 5. Settings: zero stale "fare rules" text + 2-step reset confirmation
+    fireEvent.click(screen.getByRole('button', { name: /^settings$/i }));
+    expect(screen.queryByText(/fare rules/i)).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: /reset demo dataset/i })
+    );
+    expect(
+      screen.getByRole('button', { name: /confirm reset/i })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+  });
+
+  it('recovers cleanly via ErrorBoundary when a child throws', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const BrokenChild = () => {
+      throw new Error('Simulated map crash');
+    };
+    render(
+      <ErrorBoundary scopeLabel="Transit Map">
+        <BrokenChild />
+      </ErrorBoundary>
+    );
+    expect(
+      screen.getByText(/transit map encountered an error/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/simulated map crash/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /reload view/i })
+    ).toBeInTheDocument();
+    spy.mockRestore();
   });
 });

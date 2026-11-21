@@ -25,6 +25,7 @@ import {
   MapPinpoint,
   RouteStop,
   TripOption,
+  UserLocation,
 } from '../../domain/transit/types';
 
 interface TransitMapProps {
@@ -33,15 +34,18 @@ interface TransitMapProps {
   selectedRoute: JeepneyRoute | null;
   activeTrip: TripOption | null;
   liveStopPosition?: RouteStop | null;
+  userLocation?: UserLocation | null;
+  originPickMode?: boolean;
   pinpoint?: MapPinpoint | null;
   recommendedRouteIds?: ReadonlySet<string>;
   pinpointClosestStop?: RouteStop | null;
   onSelectRoute?: (route: JeepneyRoute) => void;
   onPinpointMap?: (lat: number, lng: number) => void;
+  onSetUserLocationMap?: (lat: number, lng: number) => void;
   onClearPinpoint?: () => void;
   onPickStopAsOrigin?: (stopName: string) => void;
   onPickStopAsDestination?: (stopName: string) => void;
-  onSimulateGpsCity?: () => void;
+  onLocateMe?: () => void;
   compact?: boolean;
   showFullRouteOverview?: boolean;
   heightClass?: string;
@@ -51,11 +55,26 @@ const BOARD_GREEN = '#5D9B19';
 const DROP_AMBER = '#EA580C';
 const SECONDARY_TEAL = '#0D9488';
 const PINPOINT_SLATE = '#0F172A';
+const USER_BLUE = '#2563EB';
 
 function createPinIcon(
-  kind: 'board' | 'drop' | 'live' | 'pinpoint',
+  kind: 'board' | 'drop' | 'live' | 'pinpoint' | 'user',
   label?: string
 ) {
+  if (kind === 'user') {
+    return L.divIcon({
+      className: 'lostinph-div-icon',
+      html: `<div style="position:relative;display:flex;flex-direction:column;align-items:center;transform:translate(-50%,-50%);">
+        <div style="position:relative;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">
+          <span style="position:absolute;inset:-6px;border-radius:9999px;background:rgba(37,99,235,0.22);border:1.5px solid rgba(37,99,235,0.35);"></span>
+          <span style="width:14px;height:14px;border-radius:9999px;background:${USER_BLUE};border:2.5px solid #ffffff;box-shadow:0 2px 8px rgba(37,99,235,0.45);"></span>
+        </div>
+        <span style="margin-top:3px;background:${USER_BLUE};color:#ffffff;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;padding:1px 5px;border-radius:9999px;white-space:nowrap;border:1.5px solid #ffffff;box-shadow:0 2px 6px rgba(15,23,42,0.25);">YOU</span>
+      </div>`,
+      iconSize: [24, 36],
+      iconAnchor: [12, 12],
+    });
+  }
   if (kind === 'live') {
     return L.divIcon({
       className: 'lostinph-div-icon',
@@ -256,15 +275,18 @@ export const TransitMap: React.FC<TransitMapProps> = ({
   selectedRoute,
   activeTrip,
   liveStopPosition,
+  userLocation,
+  originPickMode = false,
   pinpoint,
   recommendedRouteIds,
   pinpointClosestStop,
   onSelectRoute,
   onPinpointMap,
+  onSetUserLocationMap,
   onClearPinpoint,
   onPickStopAsOrigin,
   onPickStopAsDestination,
-  onSimulateGpsCity,
+  onLocateMe,
   compact = false,
   showFullRouteOverview = false,
   heightClass = 'h-full min-h-[380px]',
@@ -272,6 +294,7 @@ export const TransitMap: React.FC<TransitMapProps> = ({
   const boardIcon = useMemo(() => createPinIcon('board', 'BOARD'), []);
   const dropIcon = useMemo(() => createPinIcon('drop', 'DROP OFF'), []);
   const liveIcon = useMemo(() => createPinIcon('live'), []);
+  const userIcon = useMemo(() => createPinIcon('user'), []);
   const pinpointIcon = useMemo(
     () => createPinIcon('pinpoint', 'PINPOINT'),
     []
@@ -308,7 +331,13 @@ export const TransitMap: React.FC<TransitMapProps> = ({
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
         <MapClickPinController
-          onPinpointMap={onPinpointMap}
+          onPinpointMap={(lat, lng) => {
+            if (originPickMode && onSetUserLocationMap) {
+              onSetUserLocationMap(lat, lng);
+              return;
+            }
+            onPinpointMap?.(lat, lng);
+          }}
           disabled={compact}
         />
 
@@ -507,6 +536,14 @@ export const TransitMap: React.FC<TransitMapProps> = ({
           <Marker position={[dropStop.lat, dropStop.lng]} icon={dropIcon} />
         )}
 
+        {!compact && userLocation && isFiniteLatLng(userLocation.lat, userLocation.lng) && (
+          <Marker
+            position={[userLocation.lat, userLocation.lng]}
+            icon={userIcon}
+            zIndexOffset={500}
+          />
+        )}
+
         {!compact && pinpoint && (
           <Marker
             position={[pinpoint.lat, pinpoint.lng]}
@@ -525,7 +562,17 @@ export const TransitMap: React.FC<TransitMapProps> = ({
       {!compact && (
         <div className="pointer-events-none absolute top-2.5 right-2.5 left-12 z-[400] flex items-center justify-between gap-2">
           <div className="pointer-events-auto flex min-w-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)]/95 px-2.5 py-1 text-[11px] shadow-sm sm:px-3 sm:py-1.5 sm:text-xs">
-            {selectedRoute?.verificationStatus === 'field_draft' ? (
+            {originPickMode ? (
+              <>
+                <LocateFixed
+                  className="h-3.5 w-3.5 shrink-0 text-[#2563EB]"
+                  aria-hidden="true"
+                />
+                <span className="truncate font-semibold text-[#2563EB]">
+                  Tap map to set your start location
+                </span>
+              </>
+            ) : selectedRoute?.verificationStatus === 'field_draft' ? (
               <>
                 <AlertTriangle
                   className="h-3.5 w-3.5 shrink-0 text-[var(--peak)]"
@@ -593,19 +640,19 @@ export const TransitMap: React.FC<TransitMapProps> = ({
               )
             )}
 
-            {onSimulateGpsCity && (
+            {onLocateMe && (
               <button
                 type="button"
-                onClick={onSimulateGpsCity}
-                aria-label="Detect my city using GPS"
+                onClick={onLocateMe}
+                aria-label="Locate my position using GPS"
                 className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)]/95 px-2.5 py-1 text-[11px] font-medium text-[var(--foreground)] shadow-sm transition-colors hover:bg-[var(--surface-raised)] sm:px-3 sm:py-1.5 sm:text-xs"
               >
                 <LocateFixed
-                  className="h-3.5 w-3.5 text-[var(--accent)]"
+                  className="h-3.5 w-3.5 text-[#2563EB]"
                   aria-hidden="true"
                 />
                 <span className="sm:hidden">GPS</span>
-                <span className="hidden sm:inline">Detect my city (GPS)</span>
+                <span className="hidden sm:inline">Locate me</span>
               </button>
             )}
           </div>
@@ -615,6 +662,10 @@ export const TransitMap: React.FC<TransitMapProps> = ({
       {!compact && selectedRoute && (
         <div className="pointer-events-none absolute right-3 bottom-3 left-3 z-[400] hidden items-end justify-between gap-2 sm:flex">
           <div className="pointer-events-auto flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]/95 px-3.5 py-2 text-xs shadow-sm">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#2563EB]" />
+              <span className="text-[var(--text-secondary)]">You</span>
+            </span>
             <span className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-[#5D9B19]" />
               <span className="text-[var(--text-secondary)]">Board / Route</span>
@@ -631,7 +682,7 @@ export const TransitMap: React.FC<TransitMapProps> = ({
                 aria-hidden="true"
               />
               <span className="text-[var(--text-muted)]">
-                Tap anywhere on map to pinpoint jeeps passing nearby
+                Tap anywhere on map to pinpoint destination
               </span>
             </span>
           </div>

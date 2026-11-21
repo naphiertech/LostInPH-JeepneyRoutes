@@ -5,12 +5,13 @@ import {
   ChevronRight,
   LogOut,
   Menu,
+  Search,
   X,
 } from 'lucide-react';
-import { AuthUser } from '../../domain/auth/types';
-import { CityId, CityInfo } from '../../domain/transit/types';
-import { LostInPhLogo } from '../../shared/ui/LostInPhLogo';
-import { NotificationBellPopover } from '../../shared/ui/NotificationCenter';
+import { AuthUser } from '@/domain/auth/types';
+import { CityId, CityInfo } from '@/domain/transit/types';
+import { LostInPhLogo } from '@/shared/ui/LostInPhLogo';
+import { NotificationBellPopover } from '@/shared/ui/NotificationCenter';
 import {
   ADMIN_NAV_GROUPS,
   AdminModuleId,
@@ -25,6 +26,7 @@ interface AdminShellProps {
   onChangeGlobalCity: (city: 'all' | CityId) => void;
   currentUser: AuthUser;
   onSignOut: () => void;
+  onOpenQuickJump?: () => void;
   badges: Partial<Record<AdminModuleId, number | string>>;
   children: React.ReactNode;
 }
@@ -37,6 +39,7 @@ export const AdminShell: React.FC<AdminShellProps> = ({
   onChangeGlobalCity,
   currentUser,
   onSignOut,
+  onOpenQuickJump,
   badges,
   children,
 }) => {
@@ -276,6 +279,21 @@ export const AdminShell: React.FC<AdminShellProps> = ({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {onOpenQuickJump && (
+              <button
+                type="button"
+                onClick={onOpenQuickJump}
+                aria-label="Open quick jump command palette"
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-raised)] hover:text-[var(--foreground)]"
+              >
+                <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                <span className="hidden md:inline">Quick jump</span>
+                <kbd className="hidden rounded border border-[var(--border)] bg-[var(--surface-raised)] px-1 font-mono text-[10px] text-[var(--text-muted)] md:inline">
+                  Ctrl K
+                </kbd>
+              </button>
+            )}
+
             <NotificationBellPopover
               onOpenNotificationCenter={() => onSelectModule('notifications')}
             />

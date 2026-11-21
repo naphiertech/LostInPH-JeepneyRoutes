@@ -8,10 +8,10 @@ import {
   HelpCircle,
   ShieldCheck,
 } from 'lucide-react';
-import { AuthPort } from '../../domain/auth/authPort';
-import { AccountRole, AuthSession } from '../../domain/auth/types';
-import { CityId, CityInfo, DiscountType } from '../../domain/transit/types';
-import { LostInPhLogo } from '../../shared/ui/LostInPhLogo';
+import { AuthPort } from '@/domain/auth/authPort';
+import { AccountRole, AuthSession } from '@/domain/auth/types';
+import { CityId, CityInfo } from '@/domain/transit/types';
+import { LostInPhLogo } from '@/shared/ui/LostInPhLogo';
 import { ShowcasePreviewPanel } from './ShowcasePreviewPanel';
 
 interface AuthWorkspaceProps {
@@ -34,7 +34,6 @@ export const AuthWorkspace: React.FC<AuthWorkspaceProps> = ({
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [homeCity, setHomeCity] = useState<CityId>('cebu');
-  const [discountType, setDiscountType] = useState<DiscountType>('regular');
   const [signupRole, setSignupRole] = useState<AccountRole>('app');
   const [showRecoveryHint, setShowRecoveryHint] = useState(false);
 
@@ -42,6 +41,7 @@ export const AuthWorkspace: React.FC<AuthWorkspaceProps> = ({
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const nameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
@@ -51,7 +51,6 @@ export const AuthWorkspace: React.FC<AuthWorkspaceProps> = ({
   const emailId = useId();
   const passwordId = useId();
   const cityId = useId();
-  const discountId = useId();
 
   const clearErrors = () => {
     setNameError('');
@@ -66,48 +65,60 @@ export const AuthWorkspace: React.FC<AuthWorkspaceProps> = ({
     setMode((prev) => (prev === 'signin' ? 'signup' : 'signin'));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     clearErrors();
+    setIsSubmitting(true);
 
-    const result =
-      mode === 'signin'
-        ? authPort.signIn({ email, password, rememberMe })
-        : authPort.signUp({
-            fullName,
-            email,
-            password,
-            homeCity,
-            discountType,
-            role: signupRole,
-          });
+    try {
+      const result =
+        mode === 'signin'
+          ? await authPort.signIn({ email, password, rememberMe })
+          : await authPort.signUp({
+              fullName,
+              email,
+              password,
+              homeCity,
+              discountType: 'regular',
+              role: signupRole,
+            });
 
-    if (result.ok) {
-      onAuthenticated(result.session);
-      return;
-    }
+      if (result.ok) {
+        onAuthenticated(result.session);
+        return;
+      }
 
-    if (result.field === 'name') {
-      setNameError(result.message);
-      nameRef.current?.focus();
-    } else if (result.field === 'email') {
-      setEmailError(result.message);
-      emailRef.current?.focus();
-    } else if (result.field === 'password') {
-      setPasswordError(result.message);
-      passwordRef.current?.focus();
-    } else {
-      setFormError(result.message);
+      if (result.field === 'name') {
+        setNameError(result.message);
+        nameRef.current?.focus();
+      } else if (result.field === 'email') {
+        setEmailError(result.message);
+        emailRef.current?.focus();
+      } else if (result.field === 'password') {
+        setPasswordError(result.message);
+        passwordRef.current?.focus();
+      } else {
+        setFormError(result.message);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleDemoLaunch = (role: AccountRole) => {
+  const handleDemoLaunch = async (role: AccountRole) => {
+    if (isSubmitting) return;
     clearErrors();
-    const result = authPort.signInWithDemo(role, rememberMe);
-    if (result.ok) {
-      onAuthenticated(result.session);
-    } else {
-      setFormError(result.message);
+    setIsSubmitting(true);
+    try {
+      const result = await authPort.signInWithDemo(role, rememberMe);
+      if (result.ok) {
+        onAuthenticated(result.session);
+      } else {
+        setFormError(result.message);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -259,48 +270,25 @@ export const AuthWorkspace: React.FC<AuthWorkspaceProps> = ({
 
             {mode === 'signup' && (
               <>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor={cityId}
-                      className="mb-1.5 block text-xs font-medium text-[var(--foreground)]"
-                    >
-                      Home city
-                    </label>
-                    <select
-                      id={cityId}
-                      value={homeCity}
-                      onChange={(e) => setHomeCity(e.target.value as CityId)}
-                      className="w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
-                    >
-                      {cities.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor={discountId}
-                      className="mb-1.5 block text-xs font-medium text-[var(--foreground)]"
-                    >
-                      Fare tier
-                    </label>
-                    <select
-                      id={discountId}
-                      value={discountType}
-                      onChange={(e) =>
-                        setDiscountType(e.target.value as DiscountType)
-                      }
-                      className="w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
-                    >
-                      <option value="regular">Regular</option>
-                      <option value="student">Student (-20%)</option>
-                      <option value="senior_pwd">Senior / PWD (-20%)</option>
-                    </select>
-                  </div>
+                <div>
+                  <label
+                    htmlFor={cityId}
+                    className="mb-1.5 block text-xs font-medium text-[var(--foreground)]"
+                  >
+                    Home city
+                  </label>
+                  <select
+                    id={cityId}
+                    value={homeCity}
+                    onChange={(e) => setHomeCity(e.target.value as CityId)}
+                    className="w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:outline-none"
+                  >
+                    {cities.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

@@ -145,11 +145,64 @@ export interface NetworkDemandPoint {
   reportsFiled: number;
 }
 
+export type AuditCategory = 'route' | 'advisory' | 'report' | 'system';
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  actorName: string;
+  actorRole: 'admin' | 'app' | 'system';
+  category: AuditCategory;
+  action: string;
+  target: string;
+  cityId?: CityId | 'all';
+  details: string;
+}
+
+export type RouteHealthSeverity = 'error' | 'warning';
+
+export interface RouteHealthIssue {
+  id: string;
+  severity: RouteHealthSeverity;
+  code:
+    | 'duplicate_code'
+    | 'sparse_geometry'
+    | 'large_stop_gap'
+    | 'too_few_stops'
+    | 'unverified_draft'
+    | 'orphaned_advisory';
+  cityId: CityId;
+  routeId?: string;
+  routeCode: string;
+  advisoryId?: string;
+  title: string;
+  detail: string;
+  canAutoSnap?: boolean;
+}
+
+export interface RouteHealthReport {
+  checkedAt: string;
+  totalRoutes: number;
+  totalStops: number;
+  errorCount: number;
+  warningCount: number;
+  healthScore: number;
+  issues: RouteHealthIssue[];
+}
+
 export interface TransitStoreSnapshot {
   routes: JeepneyRoute[];
   reports: CommunityReport[];
-  fareRules: FareRule[];
   advisories: CorridorAdvisory[];
+  auditLogs: AuditLogEntry[];
+}
+
+export interface UserLocation {
+  lat: number;
+  lng: number;
+  label: string;
+  source: 'gps' | 'manual' | 'city_default';
+  accuracyM?: number;
 }
 
 export interface MapPinpoint {
@@ -168,4 +221,14 @@ export interface PinpointRouteMatch {
   corridorDistanceM: number;
   effectiveDistanceM: number;
   isRecommended: boolean;
+}
+
+export interface PinpointTripRecommendation {
+  id: string;
+  trip: TripOption;
+  walkToBoardM: number;
+  walkFromAlightM: number;
+  totalWalkM: number;
+  boardStop: RouteStop;
+  alightStop: RouteStop;
 }

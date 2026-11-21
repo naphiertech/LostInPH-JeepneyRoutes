@@ -2,10 +2,7 @@ import { CityId, DiscountType, SavedPlace } from '../transit/types';
 
 export type AccountRole = 'admin' | 'app';
 
-export type StorePurchaseChannel =
-  | 'google_play'
-  | 'app_store'
-  | 'operator_grant';
+export type AppPlatform = 'android' | 'ios' | 'web';
 
 export interface AuthUser {
   id: string;
@@ -20,9 +17,10 @@ export interface AuthUser {
   savedRouteIds: string[];
   tripsCompleted: number;
   status: 'active' | 'pending_verification';
-  purchaseChannel?: StorePurchaseChannel;
-  licensePaidPhp?: number;
-  purchasedAt?: string;
+  isOnline?: boolean;
+  lastSeenLabel?: string;
+  platform?: AppPlatform;
+  joinedAt?: string;
 }
 
 export interface DemoAccount extends AuthUser {

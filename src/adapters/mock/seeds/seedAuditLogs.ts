@@ -1,0 +1,48 @@
+import { AuditLogEntry } from '@/domain/transit/types';
+
+export const SEED_AUDIT_LOGS: AuditLogEntry[] = [
+  {
+    id: 'AUD-104',
+    timestamp: '2026-11-21 09:15',
+    actorName: 'Engr. Carlo Dizon',
+    actorRole: 'admin',
+    category: 'advisory',
+    action: 'Published corridor detour',
+    target: '17C',
+    cityId: 'cebu',
+    details: 'Escario Capitol lane concrete repair flagged active for commuters.',
+  },
+  {
+    id: 'AUD-103',
+    timestamp: '2026-11-21 08:40',
+    actorName: 'Engr. Carlo Dizon',
+    actorRole: 'admin',
+    category: 'route',
+    action: 'Verified route corridor',
+    target: '04L',
+    cityId: 'cebu',
+    details: 'Confirmed Lahug–Ayala–SM City Cebu windshield signboard and 7 stops.',
+  },
+  {
+    id: 'AUD-102',
+    timestamp: '2026-11-20 18:10',
+    actorName: 'Maya Santos',
+    actorRole: 'app',
+    category: 'report',
+    action: 'Submitted commuter report',
+    target: 'REP-204',
+    cityId: 'cebu',
+    details: 'Reported updated IT Park loading bay landmark for 17C.',
+  },
+  {
+    id: 'AUD-101',
+    timestamp: '2026-11-20 14:05',
+    actorName: 'LostInPH System',
+    actorRole: 'system',
+    category: 'system',
+    action: 'Completed road-snapped geometry check',
+    target: 'All 5 Cities',
+    cityId: 'all',
+    details: 'Verified street-following polylines across 18 corridors and 96 stops.',
+  },
+];

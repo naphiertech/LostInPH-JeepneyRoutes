@@ -4,7 +4,7 @@ import {
   validateEmailAddress,
   validateFullName,
   validatePassword,
-} from '../../domain/auth/authPort';
+} from '@/domain/auth/authPort';
 import {
   AccountRole,
   AuthCredentials,
@@ -12,14 +12,14 @@ import {
   AuthUser,
   DemoAccount,
   SignUpInput,
-} from '../../domain/auth/types';
+} from '@/domain/auth/types';
 import {
   readStoredJson,
   removeStoredKey,
   STORAGE_KEYS,
   writeStoredJson,
-} from '../browser/storage';
-import { DEMO_ACCOUNTS } from './demoAccounts';
+} from '@/adapters/browser/storage';
+import { DEMO_ACCOUNTS } from './seeds/demoAccounts';
 
 function toAuthUser(account: DemoAccount): AuthUser {
   const {
@@ -52,26 +52,34 @@ function persistSession(session: AuthSession): void {
 }
 
 export function createMockAuthAdapter(): AuthPort {
+  const listeners = new Set<(session: AuthSession | null) => void>();
+
+  const emit = (session: AuthSession | null) => {
+    listeners.forEach((fn) => fn(session));
+  };
+
+  const readCachedSession = (): AuthSession | null => {
+    const local = readStoredJson<AuthSession>(STORAGE_KEYS.authSession, 'local');
+    if (local?.user?.role) return local;
+
+    const tab = readStoredJson<AuthSession>(STORAGE_KEYS.authSession, 'session');
+    return tab?.user?.role ? tab : null;
+  };
+
   return {
     getDemoAccounts(): DemoAccount[] {
       return DEMO_ACCOUNTS;
     },
 
-    loadSession(): AuthSession | null {
-      const local = readStoredJson<AuthSession>(
-        STORAGE_KEYS.authSession,
-        'local'
-      );
-      if (local?.user?.role) return local;
-
-      const tab = readStoredJson<AuthSession>(
-        STORAGE_KEYS.authSession,
-        'session'
-      );
-      return tab?.user?.role ? tab : null;
+    getCachedSession(): AuthSession | null {
+      return readCachedSession();
     },
 
-    signIn(credentials: AuthCredentials): AuthResult {
+    async loadSession(): Promise<AuthSession | null> {
+      return readCachedSession();
+    },
+
+    async signIn(credentials: AuthCredentials): Promise<AuthResult> {
       const emailErr = validateEmailAddress(credentials.email);
       if (emailErr) {
         return { ok: false, field: 'email', message: emailErr };
@@ -101,10 +109,10 @@ export function createMockAuthAdapter(): AuthPort {
           authenticatedAt: new Date().toISOString(),
         };
         persistSession(session);
+        emit(session);
         return { ok: true, session };
       }
 
-      // Guard elevated email hints while allowing custom commuter login in Phase 1
       if (normalizedEmail.includes('admin')) {
         return {
           ok: false,
@@ -134,6 +142,9 @@ export function createMockAuthAdapter(): AuthPort {
         savedRouteIds: ['cebu-17c'],
         tripsCompleted: 1,
         status: 'active',
+        isOnline: true,
+        lastSeenLabel: 'Online now',
+        platform: 'web',
       };
 
       const session: AuthSession = {
@@ -142,10 +153,14 @@ export function createMockAuthAdapter(): AuthPort {
         authenticatedAt: new Date().toISOString(),
       };
       persistSession(session);
+      emit(session);
       return { ok: true, session };
     },
 
-    signInWithDemo(role: AccountRole, rememberMe = true): AuthResult {
+    async signInWithDemo(
+      role: AccountRole,
+      rememberMe = true
+    ): Promise<AuthResult> {
       const demo = DEMO_ACCOUNTS.find((acc) => acc.role === role);
       if (!demo) {
         return {
@@ -160,10 +175,11 @@ export function createMockAuthAdapter(): AuthPort {
         authenticatedAt: new Date().toISOString(),
       };
       persistSession(session);
+      emit(session);
       return { ok: true, session };
     },
 
-    signUp(input: SignUpInput): AuthResult {
+    async signUp(input: SignUpInput): Promise<AuthResult> {
       const nameErr = validateFullName(input.fullName);
       if (nameErr) {
         return { ok: false, field: 'name', message: nameErr };
@@ -183,20 +199,19 @@ export function createMockAuthAdapter(): AuthPort {
         email: input.email.trim(),
         role: input.role,
         homeCity: input.homeCity,
-        discountType: input.discountType,
+        discountType: 'regular',
         avatarInitials: initialsFor(input.fullName),
         badgeLabel:
           input.role === 'admin'
             ? 'Transit operations contributor'
-            : input.discountType === 'student'
-              ? 'Student commuter (-20%)'
-              : input.discountType === 'senior_pwd'
-                ? 'Senior / PWD commuter (-20%)'
-                : 'Commuter app explorer',
+            : 'Commuter app explorer',
         savedPlaces: [],
         savedRouteIds: [],
         tripsCompleted: 0,
         status: 'active',
+        isOnline: true,
+        lastSeenLabel: 'Online now',
+        platform: 'web',
       };
 
       const session: AuthSession = {
@@ -205,11 +220,22 @@ export function createMockAuthAdapter(): AuthPort {
         authenticatedAt: new Date().toISOString(),
       };
       persistSession(session);
+      emit(session);
       return { ok: true, session };
     },
 
-    signOut(): void {
+    async signOut(): Promise<void> {
       removeStoredKey(STORAGE_KEYS.authSession, 'both');
+      emit(null);
+    },
+
+    onAuthStateChange(
+      listener: (session: AuthSession | null) => void
+    ): () => void {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
   };
 }

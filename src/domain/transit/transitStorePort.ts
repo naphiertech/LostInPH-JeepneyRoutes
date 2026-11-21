@@ -5,8 +5,10 @@ import {
 } from './types';
 
 export interface TransitStorePort {
-  loadSnapshot(): TransitStoreSnapshot;
-  saveSnapshot(snapshot: TransitStoreSnapshot): void;
-  resetSnapshot(): TransitStoreSnapshot;
-  submitFieldReport(input: NewFieldReportInput): CommunityReport;
+  getCachedSnapshot(): TransitStoreSnapshot;
+  loadSnapshot(): Promise<TransitStoreSnapshot>;
+  saveSnapshot(snapshot: TransitStoreSnapshot): Promise<void>;
+  resetSnapshot(): Promise<TransitStoreSnapshot>;
+  submitFieldReport(input: NewFieldReportInput): Promise<CommunityReport>;
+  subscribe(listener: (snapshot: TransitStoreSnapshot) => void): () => void;
 }

@@ -70,7 +70,7 @@ const ADMIN_INITIAL_NOTIFICATIONS: AppNotification[] = [
     id: 'notif-12l-detour',
     title: 'Detour advisory active on 12L',
     description:
-      'V. Rama Ave drainage works near Guadalupe Church remain active. Commuter route cards and pinpoint sheets now reflect the +8 min bypass.',
+      'V. Rama Ave drainage works near Guadalupe Church remain active. Commuter route cards and pinpoint sheets now reflect the bypass.',
     category: 'transit_store',
     tone: 'danger',
     tagLabel: '12L · Labangon – Ayala',
@@ -81,15 +81,15 @@ const ADMIN_INITIAL_NOTIFICATIONS: AppNotification[] = [
     actionLabel: 'Okay',
   },
   {
-    id: 'notif-play-batch',
-    title: 'Google Play Store · +18 paid downloads',
+    id: 'notif-live-surge',
+    title: '342 commuters online across 5 PH cities',
     description:
-      'Settled ₱3,582.00 gross (₱3,044.70 net after 15% Small Business fee) from Cebu & Metro Manila Android commuters.',
+      'Cebu City (124 online) and Metro Manila (118 online) lead live GPS pinpoint activity this hour.',
     category: 'transit_store',
     tone: 'success',
-    tagLabel: '₱199.00 · Android AAB',
+    tagLabel: 'Live Users · +14% vs avg',
     tagColor: '#5D9B19',
-    timestampLabel: '2h ago',
+    timestampLabel: '1h ago',
     read: false,
     expandable: true,
     actionLabel: 'Okay',
@@ -98,27 +98,13 @@ const ADMIN_INITIAL_NOTIFICATIONS: AppNotification[] = [
     id: 'notif-17c-verified',
     title: '17C Apas – Carbon Market corridor verified',
     description:
-      'OSRM road-snapped polyline (142 GPS vertices) and LTFRB MC 2023-038 base fare synced.',
+      'OSRM road-snapped polyline (142 GPS vertices) and boarding bay landmarks synced live to commuters.',
     category: 'transit_store',
     tone: 'info',
     tagLabel: '17C · Cebu City',
     tagColor: '#0D9488',
     timestampLabel: '4h ago',
     read: false,
-    expandable: true,
-    actionLabel: 'Okay',
-  },
-  {
-    id: 'notif-fare-matrix',
-    title: 'LTFRB fare matrix audit completed',
-    description:
-      'Traditional PUJ (₱13.00 base) and Modern PUV (₱15.00 base) verified with 20% student/senior rounding.',
-    category: 'system',
-    tone: 'info',
-    tagLabel: 'Fare Matrix · 5 Cities',
-    tagColor: '#2563EB',
-    timestampLabel: '6h ago',
-    read: true,
     expandable: true,
     actionLabel: 'Okay',
   },
@@ -185,14 +171,14 @@ const COMMUTER_INITIAL_NOTIFICATIONS: AppNotification[] = [
     actionLabel: 'Got it',
   },
   {
-    id: 'commuter-fare-matrix',
-    title: 'LTFRB base fares synced for your Fare Pass',
+    id: 'commuter-map-sync',
+    title: 'Cebu City street-snapped corridors refreshed',
     description:
-      'Traditional PUJ (₱13.00 base) and Modern PUV (₱15.00 base) fares reflect automatic 20% Student / Senior / PWD discounts.',
+      'All traditional jeepney and Modern PUV polylines now support live GPS Origin → Pinpoint recommendations.',
     category: 'system',
     kind: 'fare_report',
     tone: 'info',
-    tagLabel: 'LTFRB Fare Matrix',
+    tagLabel: 'Route Map · Synced',
     tagColor: '#2563EB',
     timestampLabel: '4h ago',
     read: true,
@@ -354,7 +340,7 @@ export const NotificationProvider: React.FC<{
       notify({
         title: 'Commuter alerts synced',
         description:
-          'Active corridor detours, saved route headways, and LTFRB fare rules are up to date.',
+          'Active corridor detours, saved route headways, and stop updates are up to date.',
         category: 'system',
         kind: 'fare_report',
         tone: 'info',
@@ -365,7 +351,7 @@ export const NotificationProvider: React.FC<{
     }
     notify({
       title: 'Feed synced with LostInPH telemetry',
-      description: 'Store receipts, LTFRB corridor audits, and commuter reports are up to date.',
+      description: 'Live commuter counts, corridor audits, and field reports are up to date.',
       category: 'system',
       tone: 'info',
       tagLabel: 'Live Sync',
@@ -647,7 +633,7 @@ export const NotificationBellPopover: React.FC<NotificationBellPopoverProps> = (
                 { id: 'all', label: 'All', count: counts.all },
                 {
                   id: 'transit_store',
-                  label: scope === 'commuter' ? 'Alerts' : 'Transit & Store',
+                  label: scope === 'commuter' ? 'Alerts' : 'Transit & Users',
                   count: counts.transit_store,
                 },
                 {

@@ -6,25 +6,20 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Coins,
   Flag,
+  MapPin,
   Navigation,
   ShieldCheck,
   Timer,
 } from 'lucide-react';
-import { formatFare, getMinimumDisplayFare } from '../../../domain/transit/fareEngine';
 import {
   CorridorAdvisory,
-  DiscountType,
-  FareRule,
   JeepneyRoute,
 } from '../../../domain/transit/types';
 import { TransitVehicleArtwork } from './TransitRouteArtwork';
 
 interface RouteTicketSheetProps {
   route: JeepneyRoute;
-  fareRules: FareRule[];
-  discountType: DiscountType;
   advisories: CorridorAdvisory[];
   isSaved: boolean;
   onBackToList: () => void;
@@ -39,8 +34,6 @@ interface RouteTicketSheetProps {
  */
 export const RouteTicketSheet: React.FC<RouteTicketSheetProps> = ({
   route,
-  fareRules,
-  discountType,
   advisories,
   isSaved,
   onBackToList,
@@ -50,7 +43,6 @@ export const RouteTicketSheet: React.FC<RouteTicketSheetProps> = ({
 }) => {
   const [stopsExpanded, setStopsExpanded] = useState(false);
 
-  const minFare = getMinimumDisplayFare(route, fareRules, discountType);
   const matchingAdvisories = advisories.filter(
     (a) => a.active && a.routeCode === route.code
   );
@@ -138,11 +130,11 @@ export const RouteTicketSheet: React.FC<RouteTicketSheetProps> = ({
       {/* 2x2 Key Metrics Grid */}
       <div className="grid grid-cols-2 gap-2.5">
         <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)]/60 px-3 py-2.5">
-          <Coins className="h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+          <MapPin className="h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
           <div className="min-w-0">
-            <div className="text-[11px] text-[var(--text-muted)]">Min fare</div>
-            <div className="text-sm font-semibold text-[var(--foreground)] tabular-nums">
-              {formatFare(minFare)}
+            <div className="text-[11px] text-[var(--text-muted)]">Stops</div>
+            <div className="truncate text-sm font-semibold text-[var(--foreground)] tabular-nums">
+              {route.stops.length} stops · {route.totalDistanceKm} km
             </div>
           </div>
         </div>

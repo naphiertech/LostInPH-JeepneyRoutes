@@ -4,10 +4,10 @@ import {
   AlertTriangle,
   Bus,
   CheckCircle2,
-  MapPin,
-  ReceiptText,
+  ClipboardList,
   Route,
-  ShieldCheck,
+  Settings,
+  Users,
 } from 'lucide-react';
 
 interface SlideItem {
@@ -24,21 +24,21 @@ interface SlideItem {
 const PREVIEW_SLIDES: SlideItem[] = [
   {
     id: 'overview',
-    headline: 'Stay ahead of every city corridor',
+    headline: 'Know your exact jeepney in seconds',
     subtitle:
-      'Monitor jeepney route verification, fare matrices, and commuter field reports across five Philippine cities from one workspace.',
+      'Open the live map, pinpoint your destination, and get recommended Philippine jeepney corridors—while admins monitor live users and downloads.',
     breadcrumb: 'Transit Center  ›  Overview',
-    activeNav: 'Network Overview',
-    statA: { label: 'Mapped corridors', value: '15', delta: '+3 cities verified' },
-    statB: { label: 'Open triage items', value: '4', delta: '1 needs review' },
+    activeNav: 'Overview & Live Pulse',
+    statA: { label: 'App downloads', value: '14.8k', delta: '+14.2% MoM' },
+    statB: { label: 'Online now', value: '342', delta: '5 PH cities live' },
     insights: [
       {
         title: 'Escario Capitol detour (12L)',
         detail: 'Loading shifted 60m north past Escario Central',
       },
       {
-        title: 'LTFRB fare matrix aligned',
-        detail: '₱13.00 traditional · ₱15.00 modern PUV + 20% disc.',
+        title: 'Cebu City leads live sessions',
+        detail: '124 commuters actively pinpointing routes right now',
       },
     ],
   },
@@ -46,11 +46,11 @@ const PREVIEW_SLIDES: SlideItem[] = [
     id: 'routes',
     headline: 'Every signboard placard audited',
     subtitle:
-      'Inspect alphanumeric codes like 17C and MNL-T01 alongside exact Landmark Stops and Terminal turning bays.',
-    breadcrumb: 'Transit network  ›  Routes & Signboards',
-    activeNav: 'Routes & Signboards',
+      'Inspect alphanumeric codes like 17C and 04L alongside exact Landmark Stops and Terminal turning bays.',
+    breadcrumb: 'Transit & alerts  ›  Routes & Stops',
+    activeNav: 'Routes & Stops',
     statA: { label: 'Terminals & stops', value: '79', delta: 'Across 5 regions' },
-    statB: { label: 'LTFRB anchored', value: '7', delta: 'Core arterial spines' },
+    statB: { label: 'Verified routes', value: '17', delta: 'Street-snapped' },
     insights: [
       {
         title: '17C Apas • IT Park • Carbon',
@@ -58,17 +58,17 @@ const PREVIEW_SLIDES: SlideItem[] = [
       },
       {
         title: 'BAG-M01 Mines View loop',
-        detail: 'Lower Mabini Plaza staging signage queued',
+        detail: 'Lower Mabini Plaza staging signage synced',
       },
     ],
   },
   {
     id: 'triage',
-    headline: 'Field reports routed to action',
+    headline: 'Commuter reports routed to action',
     subtitle:
-      'Structured workflow labels surface real street detours and fare updates cleanly for transit operators.',
-    breadcrumb: 'Operations & trust  ›  Field Reports',
-    activeNav: 'Field Reports & Triage',
+      'Real street detours and stop updates submitted by riders flow straight into the operator queue.',
+    breadcrumb: 'Transit & alerts  ›  Commuter Reports',
+    activeNav: 'Commuter Reports',
     statA: { label: 'Ready for review', value: '2', delta: 'Cebu & Davao' },
     statB: { label: 'Active advisories', value: '3', delta: 'Live alerts synced' },
     insights: [
@@ -85,12 +85,12 @@ const PREVIEW_SLIDES: SlideItem[] = [
 ];
 
 const PREVIEW_NAV = [
-  { label: 'Network Overview', icon: Activity },
-  { label: 'Routes & Signboards', icon: Route },
-  { label: 'Terminals & Stops', icon: MapPin },
-  { label: 'Fare Matrices', icon: ReceiptText },
-  { label: 'Field Reports & Triage', icon: AlertTriangle, badge: 'New' },
-  { label: 'Route Verification', icon: ShieldCheck },
+  { label: 'Overview & Live Pulse', icon: Activity },
+  { label: 'Users Directory', icon: Users },
+  { label: 'Routes & Stops', icon: Route },
+  { label: 'Detours & Advisories', icon: AlertTriangle, badge: 'Live' },
+  { label: 'Commuter Reports', icon: ClipboardList },
+  { label: 'Settings', icon: Settings },
 ];
 
 export const ShowcasePreviewPanel: React.FC = () => {

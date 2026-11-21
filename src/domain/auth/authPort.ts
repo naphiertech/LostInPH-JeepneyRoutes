@@ -16,11 +16,13 @@ export type AuthResult =
 
 export interface AuthPort {
   getDemoAccounts(): DemoAccount[];
-  loadSession(): AuthSession | null;
-  signIn(credentials: AuthCredentials): AuthResult;
-  signInWithDemo(role: AccountRole, rememberMe?: boolean): AuthResult;
-  signUp(input: SignUpInput): AuthResult;
-  signOut(): void;
+  getCachedSession(): AuthSession | null;
+  loadSession(): Promise<AuthSession | null>;
+  signIn(credentials: AuthCredentials): Promise<AuthResult>;
+  signInWithDemo(role: AccountRole, rememberMe?: boolean): Promise<AuthResult>;
+  signUp(input: SignUpInput): Promise<AuthResult>;
+  signOut(): Promise<void>;
+  onAuthStateChange(listener: (session: AuthSession | null) => void): () => void;
 }
 
 export function validateFullName(value: string): string {

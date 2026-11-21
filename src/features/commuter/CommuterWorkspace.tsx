@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ColorSchemeSetting,
   CommuterNotificationPrefs,
@@ -6,55 +6,49 @@ import {
   readStoredJson,
   STORAGE_KEYS,
   writeStoredJson,
-} from '../../adapters/browser/storage';
-import { AuthUser } from '../../domain/auth/types';
-import { findNearestCity } from '../../domain/transit/tripPlanner';
+} from '@/adapters/browser/storage';
+import { AuthUser } from '@/domain/auth/types';
+import { PresencePort } from '@/domain/telemetry/presencePort';
 import {
   CityId,
   CityInfo,
   CommunityReport,
   CorridorAdvisory,
-  DiscountType,
-  FareRule,
   JeepneyRoute,
   NewFieldReportInput,
   TripOption,
-} from '../../domain/transit/types';
-import { useNotifications } from '../../shared/ui/NotificationCenter';
+} from '@/domain/transit/types';
+import { useNotifications } from '@/shared/ui/NotificationCenter';
 import { CommuterTab, CommuterView } from './CommuterView';
+import { useGeolocation } from './hooks/useGeolocation';
 
 interface CommuterWorkspaceProps {
   currentUser: AuthUser;
   cities: CityInfo[];
   routes: JeepneyRoute[];
-  fareRules: FareRule[];
   advisories: CorridorAdvisory[];
-  onSubmitFieldReport: (input: NewFieldReportInput) => CommunityReport;
+  presencePort: PresencePort;
+  onSubmitFieldReport: (
+    input: NewFieldReportInput
+  ) => Promise<CommunityReport> | CommunityReport;
   schemeSetting: ColorSchemeSetting;
   onChangeScheme: (scheme: ColorSchemeSetting) => void;
   onSignOut: () => void;
 }
 
-const SAMPLE_GPS_COORDS: Array<{ label: string; lat: number; lng: number }> = [
-  { label: 'Lahug, Cebu City', lat: 10.3265, lng: 123.8988 },
-  { label: 'Ermita, Metro Manila', lat: 14.5825, lng: 120.9845 },
-  { label: 'Session Rd, Baguio City', lat: 16.4119, lng: 120.5988 },
-  { label: 'Roxas Ave, Davao City', lat: 7.0715, lng: 125.6129 },
-  { label: 'Divisoria, Cagayan de Oro', lat: 8.4774, lng: 124.6443 },
-];
-
 export const CommuterWorkspace: React.FC<CommuterWorkspaceProps> = ({
   currentUser,
   cities,
   routes,
-  fareRules,
   advisories,
+  presencePort,
   onSubmitFieldReport,
   schemeSetting,
   onChangeScheme,
   onSignOut,
 }) => {
-  const [commuterTab, setCommuterTab] = useState<CommuterTab>('home');
+  // Open directly onto Routes (live GPS map + pinpoint first) while keeping all 5 dock tabs
+  const [commuterTab, setCommuterTab] = useState<CommuterTab>('explore');
   const [selectedCityId, setSelectedCityId] = useState<CityId>(
     currentUser.homeCity
   );
@@ -65,11 +59,8 @@ export const CommuterWorkspace: React.FC<CommuterWorkspaceProps> = ({
       ''
   );
   const [activeTrip, setActiveTrip] = useState<TripOption | null>(null);
-  const [gpsCycleIdx, setGpsCycleIdx] = useState(0);
+
   const { notify } = useNotifications();
-  const [discountType, setDiscountType] = useState<DiscountType>(
-    currentUser.discountType
-  );
   const [savedRouteIds, setSavedRouteIds] = useState<string[]>(() => {
     return (
       readStoredJson<string[]>(STORAGE_KEYS.savedRoutes, 'local') ??
@@ -116,26 +107,46 @@ export const CommuterWorkspace: React.FC<CommuterWorkspaceProps> = ({
     [cityRoutes, selectedRouteId, routes]
   );
 
-  const handleSelectCity = (cityId: CityId) => {
-    setSelectedCityId(cityId);
-    const first = routes.find((r) => r.cityId === cityId);
-    if (first) setSelectedRouteId(first.id);
-    setActiveTrip(null);
-  };
+  const switchCityCore = useCallback(
+    (cityId: CityId) => {
+      setSelectedCityId(cityId);
+      const nextRoutes = routes.filter((r) => r.cityId === cityId);
+      if (nextRoutes[0]) setSelectedRouteId(nextRoutes[0].id);
+      setActiveTrip(null);
+    },
+    [routes]
+  );
 
-  const handleSimulateGps = () => {
-    const sample = SAMPLE_GPS_COORDS[gpsCycleIdx % SAMPLE_GPS_COORDS.length];
-    const detected = findNearestCity(sample.lat, sample.lng, cities);
-    setGpsCycleIdx((i) => i + 1);
-    handleSelectCity(detected.id);
-    notify({
-      title: `GPS: ${sample.label} · ${detected.name}`,
-      description: `Switched commuter map & routes to ${detected.name}.`,
-      category: 'system',
-      tone: 'info',
-      tagLabel: detected.name,
-    });
-  };
+  const {
+    userLocation,
+    gpsStatus,
+    locateMe,
+    setManualLocation,
+    jumpDemoCity,
+    resetToCityDefault,
+  } = useGeolocation({
+    cities,
+    routes,
+    selectedCity,
+    cityRoutes,
+    onSwitchCity: switchCityCore,
+    notify,
+  });
+
+  // Track live commuter presence (swaps cleanly to Supabase Realtime Presence)
+  useEffect(() => {
+    return presencePort.trackCommuterOnline(currentUser.id, selectedCity.id);
+  }, [presencePort, currentUser.id, selectedCity.id]);
+
+  const handleSelectCity = useCallback(
+    (cityId: CityId) => {
+      switchCityCore(cityId);
+      const nextCity = cities.find((c) => c.id === cityId) ?? cities[0];
+      const nextRoutes = routes.filter((r) => r.cityId === cityId);
+      resetToCityDefault(nextCity, nextRoutes);
+    },
+    [switchCityCore, cities, routes, resetToCityDefault]
+  );
 
   const handleToggleSaveRoute = (routeId: string) => {
     const matched = routes.find((r) => r.id === routeId);
@@ -151,7 +162,7 @@ export const CommuterWorkspace: React.FC<CommuterWorkspaceProps> = ({
       notify({
         title: alreadySaved
           ? `Removed ${matched?.code ?? 'route'} from saved routes`
-          : `Saved ${matched?.code ?? 'route'} for quick offline access`,
+          : `Saved ${matched?.code ?? 'route'} for quick access`,
         category: 'transit_store',
         kind: 'saved_route',
         routeCode: matched?.code,
@@ -169,7 +180,6 @@ export const CommuterWorkspace: React.FC<CommuterWorkspaceProps> = ({
           selectedCity={selectedCity}
           cityRoutes={cityRoutes}
           selectedRoute={selectedRoute}
-          fareRules={fareRules}
           cityAdvisories={cityAdvisories}
           activeTab={commuterTab}
           onTabChange={setCommuterTab}
@@ -178,13 +188,15 @@ export const CommuterWorkspace: React.FC<CommuterWorkspaceProps> = ({
           activeUser={currentUser}
           savedRouteIds={savedRouteIds}
           onToggleSaveRoute={handleToggleSaveRoute}
-          discountType={discountType}
-          onChangeDiscountType={setDiscountType}
+          userLocation={userLocation}
+          gpsStatus={gpsStatus}
+          onLocateMe={() => locateMe(false)}
+          onSetManualUserLocation={setManualLocation}
+          onDemoCityJump={jumpDemoCity}
           notificationPrefs={notificationPrefs}
           onChangeNotificationPrefs={handleChangeNotificationPrefs}
           schemeSetting={schemeSetting}
           onChangeScheme={onChangeScheme}
-          onSimulateGpsCity={handleSimulateGps}
           onOpenAuth={onSignOut}
           activeTrip={activeTrip}
           onStartTripNavigation={(trip) => {
@@ -192,8 +204,8 @@ export const CommuterWorkspace: React.FC<CommuterWorkspaceProps> = ({
             setCommuterTab('navigate');
           }}
           onClearTripNavigation={() => setActiveTrip(null)}
-          onSubmitFieldReport={(input) => {
-            const created = onSubmitFieldReport(input);
+          onSubmitFieldReport={async (input) => {
+            const created = await onSubmitFieldReport(input);
             if (notificationPrefs.fareAndReports) {
               notify({
                 title: `Report ${created.id} sent for verification`,

@@ -1,12 +1,9 @@
 import {
   Activity,
   AlertTriangle,
-  BarChart3,
   Bell,
-  Building2,
   ClipboardList,
-  MapPin,
-  ReceiptText,
+  History,
   Route,
   Settings,
   ShieldCheck,
@@ -16,17 +13,14 @@ import {
 
 export type AdminModuleId =
   | 'overview'
-  | 'analytics'
-  | 'notifications'
-  | 'routes'
-  | 'stops'
-  | 'fares'
-  | 'cities'
-  | 'reports'
-  | 'verification'
-  | 'incidents'
   | 'users'
-  | 'settings';
+  | 'routes'
+  | 'qa'
+  | 'incidents'
+  | 'reports'
+  | 'audit'
+  | 'settings'
+  | 'notifications';
 
 export interface AdminNavItem {
   id: AdminModuleId;
@@ -45,103 +39,64 @@ export interface AdminNavGroup {
 
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   {
-    id: 'overview-group',
+    id: 'pulse-group',
     title: 'Overview',
     defaultOpen: true,
     items: [
       {
         id: 'overview',
-        label: 'Network Overview',
+        label: 'Overview & Live Pulse',
         groupTitle: 'Overview',
         description:
-          'Operational health, commuter demand trends, and priority route triage.',
+          'App downloads, live online commuters, active cities, and top pinpointed jeepney corridors.',
         icon: Activity,
       },
       {
-        id: 'analytics',
-        label: 'Sales & Store Analytics',
+        id: 'users',
+        label: 'Users Directory',
         groupTitle: 'Overview',
         description:
-          '₱199 Google Play & App Store revenue, 15% store fee payouts, conversion funnel, and regional demand charts.',
-        icon: BarChart3,
-      },
-      {
-        id: 'notifications',
-        label: 'Notifications',
-        groupTitle: 'Overview',
-        description:
-          'Live operator toast stream, corridor alerts, store order receipts, and system events.',
-        icon: Bell,
+          'Registered commuters, live online presence, platform breakdown, and account access.',
+        icon: Users,
       },
     ],
   },
   {
-    id: 'network-group',
-    title: 'Transit network',
+    id: 'transit-group',
+    title: 'Transit & alerts',
     defaultOpen: true,
     items: [
       {
         id: 'routes',
-        label: 'Routes & Signboards',
-        groupTitle: 'Transit network',
+        label: 'Routes & Stops',
+        groupTitle: 'Transit & alerts',
         description:
-          'Audit Philippine jeepney route codes, windshield placards, and corridors.',
+          'Manage jeepney codes, windshield signboards, verification badges, bulk JSON imports, and mapped stops.',
         icon: Route,
       },
       {
-        id: 'stops',
-        label: 'Terminals & Stops',
-        groupTitle: 'Transit network',
+        id: 'qa',
+        label: 'Route QA & Simulator',
+        groupTitle: 'Transit & alerts',
         description:
-          'Inspect turning bays, transfer hubs, and Para Po loading zones on map.',
-        icon: MapPin,
-      },
-      {
-        id: 'fares',
-        label: 'Fare Matrices',
-        groupTitle: 'Transit network',
-        description:
-          'Manage first-4km minimum fares, per-km rates, and 20% student/senior discounts.',
-        icon: ReceiptText,
-      },
-      {
-        id: 'cities',
-        label: 'City Coverage',
-        groupTitle: 'Transit network',
-        description:
-          'Multi-city rollout status and local boarding guidance across 5 regions.',
-        icon: Building2,
-      },
-    ],
-  },
-  {
-    id: 'ops-group',
-    title: 'Operations & trust',
-    defaultOpen: true,
-    items: [
-      {
-        id: 'reports',
-        label: 'Field Reports & Triage',
-        groupTitle: 'Operations & trust',
-        description:
-          'Triage commuter reports using canonical workflow labels.',
-        icon: ClipboardList,
-      },
-      {
-        id: 'verification',
-        label: 'Route Verification',
-        groupTitle: 'Operations & trust',
-        description:
-          'Promote field drafts to community-verified or LTFRB-referenced status.',
+          'Automated data integrity checks and Origin-to-Pinpoint jeepney recommendation simulator.',
         icon: ShieldCheck,
       },
       {
         id: 'incidents',
-        label: 'Incident & Detour Alerts',
-        groupTitle: 'Operations & trust',
+        label: 'Detours & Advisories',
+        groupTitle: 'Transit & alerts',
         description:
-          'Manage active lane repairs, market rerouting, and corridor advisories.',
+          'Publish active lane repairs, rerouting notices, and live corridor advisories to commuters.',
         icon: AlertTriangle,
+      },
+      {
+        id: 'reports',
+        label: 'Commuter Reports',
+        groupTitle: 'Transit & alerts',
+        description:
+          'Triage rider-submitted landmark, detour, and new stop tips with 1-click advisory conversion.',
+        icon: ClipboardList,
       },
     ],
   },
@@ -151,26 +106,40 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     defaultOpen: true,
     items: [
       {
-        id: 'users',
-        label: 'Commuter Accounts',
+        id: 'audit',
+        label: 'Audit & Activity Log',
         groupTitle: 'System',
         description:
-          'Review platform access roles and 20% fare privilege tiers.',
-        icon: Users,
+          'Chronological trail of route edits, verifications, detours, and commuter submissions.',
+        icon: History,
       },
       {
         id: 'settings',
         label: 'Settings',
         groupTitle: 'System',
         description:
-          'Configure appearance mode, default city scope, and demo data reset.',
+          'Configure appearance mode, brand assets, and local demo dataset maintenance.',
         icon: Settings,
       },
     ],
   },
 ];
 
+const EXTRA_ADMIN_MODULES: Record<'notifications', AdminNavItem> = {
+  notifications: {
+    id: 'notifications',
+    label: 'Notifications',
+    groupTitle: 'Alerts',
+    description:
+      'Live operator toast stream, corridor alerts, commuter surges, and system events.',
+    icon: Bell,
+  },
+};
+
 export function findAdminNavItem(id: AdminModuleId): AdminNavItem {
+  if (id === 'notifications') {
+    return EXTRA_ADMIN_MODULES.notifications;
+  }
   for (const group of ADMIN_NAV_GROUPS) {
     const found = group.items.find((item) => item.id === id);
     if (found) return found;
